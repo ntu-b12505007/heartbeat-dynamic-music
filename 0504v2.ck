@@ -8,12 +8,14 @@
 // Instrument Setup
 //============================================================
 
-// Reverb 
+// Reverb
 NRev reverb => dac;
 0.15 => reverb.mix;
 
 // Melody
 SinOsc melody => LPF mFilt => ADSR env => Gain master => reverb;
+SinOsc shimmer => mFilt;
+0.05 => shimmer.gain;
 3000 => mFilt.freq;
 0.7 => mFilt.Q;
 
@@ -29,6 +31,7 @@ SinOsc chord3 => cFilt;
 
 // ADSR
 env.set(20::ms, 120::ms, 0.5, 150::ms);
+
 
 
 //============================================================
@@ -49,67 +52,112 @@ Noise hat => BPF bp => ADSR hatEnv => Gain hatGain => dac;
 hatEnv.set(1::ms, 10::ms, 0.0, 10::ms);
 
 
+
 //============================================================
 // Heart Rate Data
 //============================================================
 [
-58, 59, 60, 62,
-65, 68, 72, 78,
-85, 92, 100, 110,
-120, 135, 150, 168,
-175, 160, 140, 120,
-95, 75, 65
+    // 起始（幾乎瞬間離開 Zone1）
+    85, 100, 115,
+    // 慢跑（Zone2）
+    125, 132, 138,
+    // 穩定有氧（Zone3）
+    145, 150, 155, 152,
+    // 漸強（Zone4）
+    162, 168, 172,
+    // 衝刺（Zone5，短）
+    180, 188, 
+    // 回落
+    175, 160, 145, 130, 110
 ] @=> int heartData[];
 
 
 //============================================================
-// Scale Arrays
+// Note Arrays (Zones)
 //============================================================
-[48, 48, 50, 52] @=> int zone1[];
-[48, 50, 52, 53, 55] @=> int zone2[];
-[45, 48, 50, 52, 55, 57, 59] @=> int zone3[];
-[43, 45, 48, 50, 52, 55, 57] @=> int zone4[];
-[43, 45, 48, 50, 52, 55, 57, 59, 62, 64, 66, 69] @=> int zone5[];
+[48, 50, 52] @=> int zone1[];
+[48, 50, 52, 55] @=> int zone2[];
+[45, 48, 50, 52, 55, 57] @=> int zone3[];
+[43, 45, 48, 50, 52, 55, 57, 59] @=> int zone4[];
+[43, 45, 48, 50, 52, 55, 57, 59, 62, 64, 66] @=> int zone5[];
+
 
 
 //============================================================
 // Chord Progressions
 //============================================================
+// Zone 1：很穩
 [
-[60, 64, 67],   // C
-[57, 60, 64],   // Am
-[53, 57, 60],   // F
-[55, 59, 62]    // G
-] @=> int chords[][];
+    [60, 64, 67]
+] @=> int zone1Chords[][];
 
+// Zone 2：開始動
+[
+    [60, 64, 67],
+    [55, 59, 62]
+] @=> int zone2Chords[][];
+
+// Zone 3：正常跑
+[
+    [60, 64, 67],
+    [57, 60, 64],
+    [53, 57, 60],
+    [55, 59, 62]
+] @=> int zone3Chords[][];
+
+// Zone 4：緊張
+[
+    [57, 60, 64],   // Am
+    [59, 62, 65],   // Bdim-ish
+    [53, 57, 60],   // F
+    [55, 59, 62]    // G
+] @=> int zone4Chords[][];
+
+// Zone 5：衝刺
+[
+    [48, 55, 62],   // C add6（穩但亮）
+    [50, 57, 64],   // D sus / tension
+    [53, 60, 67],   // F 上移（開始亮）
+    [55, 62, 69]    // G open / brightness
+] @=> int zone5Chords[][];
 
 //============================================================
 // Utility Functions
 //============================================================
+
+// BPM → Zone
 fun int getZone(int bpm)
 {
-    if(bpm < 70) return 1;
-    else if(bpm < 90) return 2;
-    else if(bpm < 120) return 3;
-    else if(bpm < 145) return 4;
+    if(bpm < 110) return 1;
+    else if(bpm < 130) return 2;
+    else if(bpm < 150) return 3;
+    else if(bpm < 170) return 4;
     else return 5;
 }
 
+// BPM → beat duration
 fun dur bpmToDur(float bpm)
 {
     return (60.0 / bpm)::second;
 }
 
+// linear interpolation
 fun float lerp(float a, float b, float t)
 {
     return a + (b - a) * t;
 }
 
+// BPM → gain
 fun float bpmToGain(float bpm)
 {
-    return 0.15 + (bpm / 180.0) * 0.45;
+    if(bpm < 110) return 0.12;
+    else if(bpm < 130) return 0.12 + (bpm-110)*0.003;
+    else if(bpm < 150) return 0.18 + (bpm-130)*0.004;
+    else if(bpm < 170) return 0.26 + (bpm-150)*0.005;
+    else return 0.36 + (bpm-170)*0.006;
 }
 
+// kick sweep effect
 fun void kickDrop()
 {
     for(120 => float f; f > 60; f - 5 => f)
@@ -119,6 +167,7 @@ fun void kickDrop()
     }
     0 => kickBusy;
 }
+
 
 
 //============================================================
@@ -154,6 +203,7 @@ fun float accent(int beat, int zone)
 }
 
 
+
 //============================================================
 // Melody Note Selection
 //============================================================
@@ -169,10 +219,12 @@ fun int pickNote(int zone)
     else if(zone == 4) zone4 @=> scale;
     else zone5 @=> scale;
 
-    if(Math.randomf() < 0.8){
+    if(Math.randomf() < 0.8)
+    {
         currentIndex + Math.random2(-1, 1) => currentIndex;
     }
-    else{
+    else
+    {
         Math.random2(0, scale.size()-1) => currentIndex;
     }
 
@@ -183,25 +235,33 @@ fun int pickNote(int zone)
 }
 
 
+
 //============================================================
 // Chord Playback
 //============================================================
+0 => int chordIndex;
+
 fun void playChord(int zone)
 {
-    chords[(zone-1) % chords.size()][0] => int root;
-    chords[(zone-1) % chords.size()][1] => int third;
-    chords[(zone-1) % chords.size()][2] => int fifth;
+    int currentChord[];
 
-    Std.mtof(root) => chord1.freq;
-    Std.mtof(third) => chord2.freq;
-    Std.mtof(fifth) => chord3.freq;
+    if(zone == 1) zone1Chords[chordIndex % zone1Chords.size()] @=> currentChord;
+    else if(zone == 2) zone2Chords[chordIndex % zone2Chords.size()] @=> currentChord;
+    else if(zone == 3) zone3Chords[chordIndex % zone3Chords.size()] @=> currentChord;
+    else if(zone == 4) zone4Chords[chordIndex % zone4Chords.size()] @=> currentChord;
+    else zone5Chords[chordIndex % zone5Chords.size()] @=> currentChord;
+
+    Std.mtof(currentChord[0]) => chord1.freq;
+    Std.mtof(currentChord[1]) => chord2.freq;
+    Std.mtof(currentChord[2]) => chord3.freq;
+
+    chordIndex++;
 }
-
 
 //============================================================
 // Main Performance
 //============================================================
-80.0 => float currentBPM;
+heartData[0] => float currentBPM;
 1 => int beatCount;
 
 for(0 => int i; i < heartData.size(); i++)
@@ -211,62 +271,142 @@ for(0 => int i; i < heartData.size(); i++)
 
     <<< "Heart Rate:", heartData[i], "Zone:", zone >>>;
 
-    for(0 => int step; step < 8; step++)
+    for(0 => int step; step < 8; step++) // 8 beats
     {
-        if(step == 0){
+        if(step == 0)
+        {
             0 => currentIndex;
         }
 
-        lerp(currentBPM, targetBPM, 0.15) => currentBPM;
+        // BPM smoothing
+        lerp(currentBPM, targetBPM, 0.25) => currentBPM;
 
         bpmToDur(currentBPM) => dur beatDur;
         bpmToGain(currentBPM) => float baseGain;
 
+        // chord trigger
         if(beatCount % 8 == 1)
         {
             playChord(zone);
         }
 
-        pickNote(zone) => int note;
-        Std.mtof(note) => melody.freq;
+        // Zone 1 extra sparse behavior
+        if(zone == 1)
+        {
+            if(beatCount % 4 == 1)
+            {
+                pickNote(zone) => int note;
+                Std.mtof(note) => melody.freq;
+                env.keyOn();
+            }
 
+            if(Math.randomf() < 0.12)
+            {
+                hatEnv.keyOn();
+            }
+        }
+
+        // Zone 2 behavior (slightly structured groove)
+        if(zone == 2)
+        {
+            if(beatCount % 2 == 0)
+            {
+                hatEnv.keyOn();
+            }
+
+            if(beatCount % 4 == 1)
+            {
+                pickNote(zone) => int note;
+                Std.mtof(note) => melody.freq;
+                env.keyOn();
+            }
+
+            if(beatCount % 8 == 1 && Math.randomf() < 0.5)
+            {
+                playChord(zone);
+            }
+        }
+
+
+        // ⭐ zone5
+        if(zone == 5)
+        {
+            pickNote(zone) => int note;
+
+            // 亮
+            Std.mtof(note + 12) => melody.freq;
+
+            // shimmer 當補光
+            Std.mtof(note + 12) => shimmer.freq;
+
+            env.attackTime(10::ms);
+            env.releaseTime(120::ms);
+            env.keyOn();
+        }
+        else
+        {
+            // melody
+            pickNote(zone) => int note;
+            Std.mtof(note) => melody.freq;
+
+            env.set(20::ms, 120::ms, 0.5, 150::ms);
+        }
+        // dynamics
         accent(beatCount, zone) * baseGain * 0.7 => master.gain;
 
-        if((beatCount == 1 || beatCount == 5) && kickBusy == 0){
+        // kick
+        if((beatCount == 1 || beatCount == 5) && kickBusy == 0)
+        {
             1 => kickBusy;
             120 => kick.freq;
             kickEnv.keyOn();
             spork ~ kickDrop();
         }
 
-        if(beatCount % 2 == 0){
+        // hi-hat basic rhythm
+        if(beatCount % 2 == 0)
+        {
             0.15 => hatGain.gain;
         }
-        else{
+        else
+        {
             0.08 => hatGain.gain;
         }
 
-        if(zone <= 2){
+        // hi-hat density by zone
+        if(zone <= 2)
+        {
             hatEnv.keyOn();
         }
-        else if(zone <= 3){
+        else if(zone <= 3)
+        {
             if(beatCount % 2 == 0 || Math.randomf() < 0.3)
                 hatEnv.keyOn();
         }
-        else{
-            if(Math.randomf() < 0.7)
+        else if(zone == 4)
+        {
+            if(Math.randomf() < 0.4)
                 hatEnv.keyOn();
         }
+        else
+        {
+            if(beatCount % 4 == 0 && Math.randomf() < 0.2)
+            hatEnv.keyOn();
+        }
 
+        // rhythm decision
         float rhythm;
 
         if(zone <= 2)
             1.0 => rhythm;
-        else if(zone <= 3)
+        else if(zone == 3)
+            0.6 => rhythm;
+        else if(zone == 4)
             0.5 => rhythm;
         else
-            (Math.randomf() < 0.7 ? 0.5 : 1.0) => rhythm;
+            0.35 + Math.random2f(0, 0.15) => rhythm;
 
+        // play envelope
         env.keyOn();
         beatDur * rhythm * 0.8 => now;
         env.keyOff();
@@ -276,6 +416,7 @@ for(0 => int i; i < heartData.size(); i++)
         if(beatCount > 8) 1 => beatCount;
     }
 }
+
 
 
 //============================================================
