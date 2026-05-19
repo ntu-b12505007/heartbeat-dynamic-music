@@ -26,8 +26,8 @@ SinOsc chord3 => cFilt;
 2000 => cFilt.freq;
 
 // Gain
-0.20 => master.gain;
-0.07 => chordGain.gain;
+0.15 => master.gain;
+0.20 => chordGain.gain;
 
 // ADSR
 env.set(20::ms, 120::ms, 0.5, 150::ms);
@@ -40,7 +40,7 @@ env.set(20::ms, 120::ms, 0.5, 150::ms);
 
 // Kick
 SinOsc kick => ADSR kickEnv => Gain kickGain => dac;
-0.45 => kickGain.gain;
+0.35 => kickGain.gain;
 kickEnv.set(5::ms, 50::ms, 0.0, 50::ms);
 0 => int kickBusy;
 
@@ -57,20 +57,39 @@ hatEnv.set(1::ms, 10::ms, 0.0, 10::ms);
 // Heart Rate Data
 //============================================================
 [
-    // 起始（幾乎瞬間離開 Zone1）
-    85, 100, 115,
-    // 慢跑（Zone2）
-    125, 132, 138,
-    // 穩定有氧（Zone3）
-    145, 150, 155, 152,
-    // 漸強（Zone4）
-    162, 168, 172,
-    // 衝刺（Zone5，短）
-    180, 188, 
-    // 回落
-    175, 160, 145, 130, 110
-] @=> int heartData[];
+    // warm-up
+    80, 82, 85, 88, 90,
 
+    // gradual rise
+    95, 100, 105, 110,
+
+    // zone 2 transition
+    115, 120, 125, 128, 130,
+
+    // steady cardio
+    132, 135, 138, 140, 142, 145,
+
+    // threshold push
+    148, 150, 152, 155, 158,
+
+    // zone 4 climb
+    160, 163, 166, 168, 170,
+
+    // sprint peak
+    172, 175, 178, 182, 185, 188,
+
+    // recovery drop
+    180, 175, 170, 165, 160,
+
+    // second wave (fatigue)
+    158, 155, 150, 145, 140,
+
+    // cooldown
+    135, 130, 125, 120, 115, 110,
+
+    // final rest
+    105, 100, 95, 90, 85
+] @=> int heartData[];
 
 //============================================================
 // Note Arrays (Zones)
